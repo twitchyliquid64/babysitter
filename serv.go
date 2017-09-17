@@ -1,10 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"html/template"
 	"net/http"
+	"os"
+	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -40,11 +44,37 @@ type statusData struct {
 
 	StartTime time.Time
 	Status    *status
+	Mem       *runtime.MemStats
+	DiskFree  uint64
+	DiskTotal uint64
+	NumCPUs   int
 }
 
 var currentStatus status
 
 var funcMap = template.FuncMap{
+	"bytes": func(bytes uint64) string {
+		unit := ""
+		value := float32(bytes)
+
+		switch {
+		case bytes >= (1024 * 1024 * 1024 * 1):
+			unit = "G"
+			value = value / (1024 * 1024 * 1024 * 1)
+		case bytes >= (1024 * 1024 * 1):
+			unit = "M"
+			value = value / (1024 * 1024 * 1)
+		case bytes >= (1024 * 1):
+			unit = "K"
+			value = value / (1024 * 1)
+		case bytes >= 1:
+			unit = "B"
+		case bytes == 0:
+			return "0"
+		}
+
+		return fmt.Sprintf("%s%s", strings.TrimSuffix(fmt.Sprintf("%.1f", value), ".0"), unit)
+	},
 	"percent": func(sub, total uint64) string {
 		if total == 0 {
 			return "NaN"
@@ -94,12 +124,24 @@ var funcMap = template.FuncMap{
 	},
 }
 
+func getDiskFreeAndTotal() (uint64, uint64) {
+	var stat syscall.Statfs_t
+	wd, _ := os.Getwd()
+	syscall.Statfs(wd, &stat)
+	// Available blocks * size per block = available space in bytes
+	return stat.Bavail * uint64(stat.Bsize), stat.Blocks * uint64(stat.Bsize)
+}
+
 func statusPage(w http.ResponseWriter, r *http.Request) {
 	t, err := template.New("status").Funcs(funcMap).Parse(statusTemplate)
 	if err != nil {
 		w.Write([]byte("Template Error: " + err.Error()))
 		return
 	}
+
+	diskFree, diskTotal := getDiskFreeAndTotal()
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
 
 	err = t.ExecuteTemplate(w, "status", statusData{
 		Name:             strFlag("service-name", "Babysitter"),
@@ -115,6 +157,10 @@ func statusPage(w http.ResponseWriter, r *http.Request) {
 		WebhookScript:    strFlag("webhook-script", ""),
 		WebhookToken:     strFlag("webhook-token", ""),
 		Status:           &currentStatus,
+		NumCPUs:          runtime.NumCPU(),
+		Mem:              &memStats,
+		DiskFree:         diskFree,
+		DiskTotal:        diskTotal,
 	})
 	if err != nil {
 		w.Write([]byte("Template Exec Error: " + err.Error()))
@@ -271,6 +317,24 @@ var statusTemplate = `
 							<tr>
 								<td>Service uptime</td>
 								<td>{{timeformat .StartTime}}</td>
+							</tr>
+							<tr>
+								<td>Num CPUs</td>
+								<td>{{.NumCPUs}}</td>
+							</tr>
+							<tr>
+								<td>Disk</td>
+								<td>
+									Free: {{bytes .DiskFree}} ({{percent .DiskFree .DiskTotal}}%)<br>
+									Total: {{bytes .DiskTotal}}
+								</td>
+							</tr>
+							<tr>
+								<td>Memory (babysitter)</td>
+								<td>
+									Allocated: {{bytes .Mem.Sys}}<br>
+									GC Count: {{.Mem.NumGC}}
+								</td>
 							</tr>
 						</tbody>
 					</table>
