@@ -11,9 +11,15 @@ import (
 )
 
 func webhookHandler(w http.ResponseWriter, req *http.Request) {
+	if currentStatus.WebhookRunning {
+		fmt.Fprintln(os.Stderr, "Aborting webhook: already running!")
+		return
+	}
+
 	currentStatus.WebhookRunning = true
 	defer func() {
 		currentStatus.WebhookRunning = false
+		currentStatus.WebhookCount++
 	}()
 
 	tmpfile, err := ioutil.TempFile("", "params")

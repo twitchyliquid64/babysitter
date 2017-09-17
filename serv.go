@@ -21,6 +21,7 @@ type status struct {
 	LastRunError error
 
 	WebhookRunning bool
+	WebhookCount   int
 }
 
 type statusData struct {
@@ -188,6 +189,14 @@ var statusTemplate = `
 						<tr>
 							<td>Last termination error</td>
 							<td>{{.Status.LastRunError}}</td>
+						</tr>
+						<tr>
+							<td>Webhook in progress</td>
+							<td>{{boolcolor .Status.WebhookRunning}}</td>
+						</tr>
+						<tr>
+							<td>Webhook invocations</td>
+							<td>{{.Status.WebhookCount}}</td>
 						</tr>
 					</tbody>
 				</table>
