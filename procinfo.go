@@ -15,6 +15,7 @@ import (
 type procInfo struct {
 	PSS          uint64
 	ScheduleTime time.Duration
+	NumThreads   int
 }
 
 func readIntAdditive(f io.Reader, prefix []byte) (uint64, error) {
@@ -54,10 +55,21 @@ func getInfoForProcess(pid int) (procInfo, error) {
 		return procInfo{}, err
 	}
 	statSpl := strings.Split(string(statData), " ")
-	usrClockTicks, _ := strconv.ParseUint(statSpl[13], 10, 64)
+	// for i := range statSpl {
+	// 	fmt.Printf("%d: %s\n", i, statSpl[i])
+	// }
+	usrClockTicks, err := strconv.ParseUint(statSpl[13], 10, 64)
+	if err != nil {
+		return procInfo{}, err
+	}
+	numThreads, err := strconv.Atoi(statSpl[19])
+	if err != nil {
+		return procInfo{}, err
+	}
 
 	return procInfo{
 		PSS:          pss * 1024,
-		ScheduleTime: time.Duration(usrClockTicks) * time.Second / 100, // 100hz
+		ScheduleTime: time.Duration(usrClockTicks) * time.Millisecond * 10, // 100hz
+		NumThreads:   numThreads,
 	}, nil
 }

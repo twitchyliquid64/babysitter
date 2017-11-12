@@ -54,6 +54,7 @@ type statusData struct {
 	ProcessScheduleTime time.Duration
 	ProcessErr          error
 	ProcessStartedAt    time.Time
+	ProcessNumThreads   int
 }
 
 var currentStatus status
@@ -96,7 +97,7 @@ var funcMap = template.FuncMap{
 		return template.HTML("<span style=\"color: #AA0000;\">No</span>")
 	},
 	"durationtime": func(in time.Duration) string {
-		return fmt.Sprintf("%.2f ms, %d secs, %d mins, %d hrs", float64((in.Nanoseconds()%(1000*1000)))/float64(1000), int(in.Seconds())%60, int(in.Minutes())%60, int(in.Hours()))
+		return fmt.Sprintf("%d ms, %d secs, %d mins, %d hrs", (in.Nanoseconds()/1000)%1000, int(in.Seconds())%60, int(in.Minutes())%60, int(in.Hours()))
 	},
 	"timeformat": func(in time.Time) string {
 		t := time.Now().Sub(in)
@@ -176,6 +177,7 @@ func statusPage(w http.ResponseWriter, r *http.Request) {
 		ProcessPSS:          processInfo.PSS,
 		ProcessScheduleTime: processInfo.ScheduleTime,
 		ProcessStartedAt:    processStarted,
+		ProcessNumThreads:   processInfo.NumThreads,
 	})
 	if err != nil {
 		w.Write([]byte("Template Exec Error: " + err.Error()))
@@ -270,7 +272,8 @@ var statusTemplate = `
 							<td>
 								Memory usage: {{bytes .ProcessPSS}}<br>
 								Uptime: {{timeformat .ProcessStartedAt}}<br>
-								CPU time: {{durationtime .ProcessScheduleTime}}
+								CPU time: {{durationtime .ProcessScheduleTime}}<br>
+								No. Threads: {{.ProcessNumThreads}}
 							</td>
 						</tr>
 						{{end}}
