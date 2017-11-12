@@ -36,6 +36,7 @@ func run(args []string, wd string, stdout io.Writer, stderr io.Writer) error {
 		cmd.Stderr = stderr
 	}
 	err := cmd.Start()
+	processStarted = time.Now()
 	if err != nil {
 		return err
 	}

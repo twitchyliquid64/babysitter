@@ -13,6 +13,7 @@ import (
 )
 
 var startTime time.Time
+var processStarted time.Time
 
 func init() {
 	startTime = time.Now()
@@ -48,6 +49,11 @@ type statusData struct {
 	DiskFree  uint64
 	DiskTotal uint64
 	NumCPUs   int
+
+	ProcessPSS          uint64
+	ProcessScheduleTime time.Duration
+	ProcessErr          error
+	ProcessStartedAt    time.Time
 }
 
 var currentStatus status
@@ -88,6 +94,9 @@ var funcMap = template.FuncMap{
 			return template.HTML("<span style=\"color: #00AA00;\">Yes</span>")
 		}
 		return template.HTML("<span style=\"color: #AA0000;\">No</span>")
+	},
+	"durationtime": func(in time.Duration) string {
+		return fmt.Sprintf("%.2f ms, %d secs, %d mins, %d hrs", float64((in.Nanoseconds()%(1000*1000)))/float64(1000), int(in.Seconds())%60, int(in.Minutes())%60, int(in.Hours()))
 	},
 	"timeformat": func(in time.Time) string {
 		t := time.Now().Sub(in)
@@ -143,24 +152,30 @@ func statusPage(w http.ResponseWriter, r *http.Request) {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
+	processInfo, processErr := getInfoForProcess(currentStatus.Pid)
+
 	err = t.ExecuteTemplate(w, "status", statusData{
-		Name:             strFlag("service-name", "Babysitter"),
-		Listenaddr:       strFlag("status-serv", ":7000"),
-		ShowFullInfo:     boolFlag("show-full-data", false),
-		Cmd:              extraArgs,
-		StartTime:        startTime,
-		Stdout:           strFlag("stdout", "/dev/stdout"),
-		Stderr:           strFlag("stderr", "/dev/stderr"),
-		RestartDelay:     intFlag("restart-delay-ms", 2000),
-		Background:       strFlag("status-color", "#F0F0F0"),
-		WebhookInstalled: strFlag("webhook-script", "") != "" && strFlag("webhook-token", "") != "",
-		WebhookScript:    strFlag("webhook-script", ""),
-		WebhookToken:     strFlag("webhook-token", ""),
-		Status:           &currentStatus,
-		NumCPUs:          runtime.NumCPU(),
-		Mem:              &memStats,
-		DiskFree:         diskFree,
-		DiskTotal:        diskTotal,
+		Name:                strFlag("service-name", "Babysitter"),
+		Listenaddr:          strFlag("status-serv", ":7000"),
+		ShowFullInfo:        boolFlag("show-full-data", false),
+		Cmd:                 extraArgs,
+		StartTime:           startTime,
+		Stdout:              strFlag("stdout", "/dev/stdout"),
+		Stderr:              strFlag("stderr", "/dev/stderr"),
+		RestartDelay:        intFlag("restart-delay-ms", 2000),
+		Background:          strFlag("status-color", "#F0F0F0"),
+		WebhookInstalled:    strFlag("webhook-script", "") != "" && strFlag("webhook-token", "") != "",
+		WebhookScript:       strFlag("webhook-script", ""),
+		WebhookToken:        strFlag("webhook-token", ""),
+		Status:              &currentStatus,
+		NumCPUs:             runtime.NumCPU(),
+		Mem:                 &memStats,
+		DiskFree:            diskFree,
+		DiskTotal:           diskTotal,
+		ProcessErr:          processErr,
+		ProcessPSS:          processInfo.PSS,
+		ProcessScheduleTime: processInfo.ScheduleTime,
+		ProcessStartedAt:    processStarted,
 	})
 	if err != nil {
 		w.Write([]byte("Template Exec Error: " + err.Error()))
@@ -244,6 +259,21 @@ var statusTemplate = `
 							<td>Webhook invocations</td>
 							<td>{{.Status.WebhookCount}}</td>
 						</tr>
+						{{if .ProcessErr}}
+						<tr>
+							<td>Resource usage</td>
+							<td>Failed to read resource usage: {{.ProcessErr}}</td>
+						</tr>
+						{{else}}
+						<tr>
+							<td>Resource usage</td>
+							<td>
+								Memory usage: {{bytes .ProcessPSS}}<br>
+								Uptime: {{timeformat .ProcessStartedAt}}<br>
+								CPU time: {{durationtime .ProcessScheduleTime}}
+							</td>
+						</tr>
+						{{end}}
 					</tbody>
 				</table>
 			</td>
