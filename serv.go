@@ -97,7 +97,7 @@ var funcMap = template.FuncMap{
 		return template.HTML("<span style=\"color: #AA0000;\">No</span>")
 	},
 	"durationtime": func(in time.Duration) string {
-		return fmt.Sprintf("%d ms, %d secs, %d mins, %d hrs", (in.Nanoseconds()/1000)%1000, int(in.Seconds())%60, int(in.Minutes())%60, int(in.Hours()))
+		return fmt.Sprintf("%d ms, %d secs, %d mins, %d hrs", (in.Nanoseconds()/1000/1000)%1000, int(in.Seconds())%60, int(in.Minutes())%60, int(in.Hours()))
 	},
 	"timeformat": func(in time.Time) string {
 		t := time.Now().Sub(in)
